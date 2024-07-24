@@ -37,6 +37,7 @@ data/images/*
 datasets/*
 results*.csv
 1000layout_samples_to_purdue/
+tools/samples
 # Datasets -------------------------------------------------------------------------------------------------------------
 coco/
 coco128/
