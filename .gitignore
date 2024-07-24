@@ -1,3 +1,6 @@
+1000layout_samples_to_purdue/
+tools/samples
+
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
 *.jpg
 *.jpeg
@@ -36,8 +39,7 @@ data/images/*
 !data/*.sh
 datasets/*
 results*.csv
-1000layout_samples_to_purdue/
-tools/samples
+
 # Datasets -------------------------------------------------------------------------------------------------------------
 coco/
 coco128/
