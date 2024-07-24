@@ -36,7 +36,7 @@ data/images/*
 !data/*.sh
 datasets/*
 results*.csv
-1000layout_samples_to_purdue
+1000layout_samples_to_purdue/
 # Datasets -------------------------------------------------------------------------------------------------------------
 coco/
 coco128/
