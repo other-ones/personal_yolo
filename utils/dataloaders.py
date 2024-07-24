@@ -173,11 +173,15 @@ def create_dataloader(
     prefix="",
     shuffle=False,
     seed=0,
+    rgb=False
 ):
     if rect and shuffle:
         LOGGER.warning("WARNING ⚠️ --rect is incompatible with DataLoader shuffle, setting shuffle=False")
         shuffle = False
     with torch_distributed_zero_first(rank):  # init dataset *.cache only once if DDP
+        # HERE
+        # /data/twkim/doc_layout/raw/doclaynet/yolo/train_c6.txt path
+        print(path,'path')
         dataset = LoadImagesAndLabels(
             path,
             imgsz,
@@ -537,7 +541,7 @@ class LoadImagesAndLabels(Dataset):
     def __init__(
         self,
         path,
-        img_size=640,
+        img_size=1025,
         batch_size=16,
         augment=False,
         hyp=None,
@@ -764,7 +768,6 @@ class LoadImagesAndLabels(Dataset):
     def __getitem__(self, index):
         """Fetches the dataset item at the given index, considering linear, shuffled, or weighted sampling."""
         index = self.indices[index]  # linear, shuffled, or image_weights
-
         hyp = self.hyp
         mosaic = self.mosaic and random.random() < hyp["mosaic"]
         if mosaic:
@@ -805,12 +808,12 @@ class LoadImagesAndLabels(Dataset):
             labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1e-3)
 
         if self.augment:
+
             # Albumentations
             img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
-
             # HSV color-space
-            augment_hsv(img, hgain=hyp["hsv_h"], sgain=hyp["hsv_s"], vgain=hyp["hsv_v"])
+            # augment_hsv(img, hgain=hyp["hsv_h"], sgain=hyp["hsv_s"], vgain=hyp["hsv_v"])
 
             # Flip up-down
             if random.random() < hyp["flipud"]:
@@ -833,9 +836,11 @@ class LoadImagesAndLabels(Dataset):
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         # Convert
+        if img.ndim<3:
+            img=np.expand_dims(img,-1)
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img = np.ascontiguousarray(img)
-
+        img = np.ascontiguousarray(img).copy()
+        # print(torch.from_numpy(img).shape,'torch.from_numpy(img).shape')
         return torch.from_numpy(img), labels_out, self.im_files[index], shapes
 
     def load_image(self, i):
@@ -850,16 +855,21 @@ class LoadImagesAndLabels(Dataset):
             self.npy_files[i],
         )
         if im is None:  # not cached in RAM
+            # HERE
             if fn.exists():  # load npy
                 im = np.load(fn)
             else:  # read image
+                # im = cv2.imread(f,cv2.IMREAD_GRAYSCALE)  # BGR
                 im = cv2.imread(f)  # BGR
+                # print('HERE')
                 assert im is not None, f"Image Not Found {f}"
             h0, w0 = im.shape[:2]  # orig hw
             r = self.img_size / max(h0, w0)  # ratio
             if r != 1:  # if sizes are not equal
                 interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
                 im = cv2.resize(im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp)
+            if im.ndim!=3:
+                im=np.expand_dims(im,-1)
             return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
 
@@ -906,13 +916,11 @@ class LoadImagesAndLabels(Dataset):
                 segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
             labels4.append(labels)
             segments4.extend(segments)
-
         # Concat/clip labels
         labels4 = np.concatenate(labels4, 0)
         for x in (labels4[:, 1:], *segments4):
             np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
         # img4, labels4 = replicate(img4, labels4)  # replicate
-
         # Augment
         img4, labels4, segments4 = copy_paste(img4, labels4, segments4, p=self.hyp["copy_paste"])
         img4, labels4 = random_perspective(
@@ -926,7 +934,6 @@ class LoadImagesAndLabels(Dataset):
             perspective=self.hyp["perspective"],
             border=self.mosaic_border,
         )  # border to remove
-
         return img4, labels4
 
     def load_mosaic9(self, index):

@@ -186,7 +186,7 @@ class Loggers:
                 for path in paths:
                     self.clearml.log_plot(title=path.stem, plot_path=path)
 
-    def on_train_batch_end(self, model, ni, imgs, targets, paths, vals):
+    def on_train_batch_end(self, model, ni, imgs, targets, paths, vals,num_channels):
         """Logs training batch end events, plots images, and updates external loggers with batch-end data."""
         log_dict = dict(zip(self.keys[:3], vals))
         # Callback runs on train batch end
@@ -196,7 +196,7 @@ class Loggers:
                 f = self.save_dir / f"train_batch{ni}.jpg"  # filename
                 plot_images(imgs, targets, paths, f)
                 if ni == 0 and self.tb and not self.opt.sync_bn:
-                    log_tensorboard_graph(self.tb, model, imgsz=(self.opt.imgsz, self.opt.imgsz))
+                    log_tensorboard_graph(self.tb, model, imgsz=(self.opt.imgsz, self.opt.imgsz),num_channels=num_channels)
             if ni == 10 and (self.wandb or self.clearml):
                 files = sorted(self.save_dir.glob("train*.jpg"))
                 if self.wandb:
@@ -449,12 +449,12 @@ class GenericLogger:
             self.clearml.task.connect(params)
 
 
-def log_tensorboard_graph(tb, model, imgsz=(640, 640)):
+def log_tensorboard_graph(tb, model, imgsz=(640, 640),num_channels=1):
     """Logs the model graph to TensorBoard with specified image size and model."""
     try:
         p = next(model.parameters())  # for device, type
         imgsz = (imgsz, imgsz) if isinstance(imgsz, int) else imgsz  # expand
-        im = torch.zeros((1, 3, *imgsz)).to(p.device).type_as(p)  # input image (WARNING: must be zeros, not empty)
+        im = torch.zeros((1, num_channels, *imgsz)).to(p.device).type_as(p)  # input image (WARNING: must be zeros, not empty)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # suppress jit trace warning
             tb.add_graph(torch.jit.trace(de_parallel(model), im, strict=False), [])

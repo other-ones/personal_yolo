@@ -156,7 +156,6 @@ def random_perspective(
 ):
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10))
     # targets = [cls, xyxy]
-
     height = im.shape[0] + border[0] * 2  # shape(h,w,c)
     width = im.shape[1] + border[1] * 2
 
@@ -195,7 +194,8 @@ def random_perspective(
             im = cv2.warpPerspective(im, M, dsize=(width, height), borderValue=(114, 114, 114))
         else:  # affine
             im = cv2.warpAffine(im, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
-
+    if im.ndim<3:
+        im=np.expand_dims(im,-1)
     # Visualize
     # import matplotlib.pyplot as plt
     # ax = plt.subplots(1, 2, figsize=(12, 6))[1].ravel()

@@ -174,6 +174,9 @@ def train(hyp, opt, device, callbacks):
     init_seeds(opt.seed + 1 + RANK, deterministic=True)
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
+        # {'path': PosixPath('/data/twkim/doc_layout/raw/doclaynet/yolo'), 'train': '/data/twkim/doc_layout/raw/doclaynet/yolo/train_c6.txt', 'val': '/data/twkim/doc_layout/raw/doclaynet/yolo/val_c6.txt', 'test': '/data/twkim/doc_layout/raw/doclaynet/yolo/test_c6.txt', 'names': {0: 'text', 1: 'table', 2: 'figure', 3: 'formula', 4: 'footer', 5: 'header'}, 'nc': 6} data_dict
+    print(data,'data')
+    print(data_dict,'data_dict')
     train_path, val_path = data_dict["train"], data_dict["val"]
     nc = 1 if single_cls else int(data_dict["nc"])  # number of classes
     names = {0: "item"} if single_cls and len(data_dict["names"]) != 1 else data_dict["names"]  # class names
@@ -186,14 +189,15 @@ def train(hyp, opt, device, callbacks):
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location="cpu")  # load checkpoint to CPU to avoid CUDA memory leak
-        model = Model(cfg or ckpt["model"].yaml, ch=3, nc=nc, anchors=hyp.get("anchors")).to(device)  # create
+        # CHANNEL HERE
+        model = Model(cfg or ckpt["model"].yaml, ch=opt.num_channels, nc=nc, anchors=hyp.get("anchors")).to(device)  # create
         exclude = ["anchor"] if (cfg or hyp.get("anchors")) and not resume else []  # exclude keys
         csd = ckpt["model"].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f"Transferred {len(csd)}/{len(model.state_dict())} items from {weights}")  # report
-    else:
-        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get("anchors")).to(device)  # create
+    else: #HERE
+        model = Model(cfg, ch=opt.num_channels, nc=nc, anchors=hyp.get("anchors")).to(device)  # create
     amp = check_amp(model)  # check AMP
 
     # Freeze
@@ -331,10 +335,12 @@ def train(hyp, opt, device, callbacks):
         f"Logging results to {colorstr('bold', save_dir)}\n"
         f'Starting training for {epochs} epochs...'
     )
+
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run("on_train_epoch_start")
         model.train()
-
+        # print(epoch,'epoch')
+        # exit()
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
@@ -357,7 +363,8 @@ def train(hyp, opt, device, callbacks):
             callbacks.run("on_train_batch_start")
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255  # uint8 to float32, 0-255 to 0.0-1.0
-
+            # print(imgs.shape,'imgs.shape in train')
+            # exit()
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
@@ -408,7 +415,7 @@ def train(hyp, opt, device, callbacks):
                     ("%11s" * 2 + "%11.4g" * 5)
                     % (f"{epoch}/{epochs - 1}", mem, *mloss, targets.shape[0], imgs.shape[-1])
                 )
-                callbacks.run("on_train_batch_end", model, ni, imgs, targets, paths, list(mloss))
+                callbacks.run("on_train_batch_end", model, ni, imgs, targets, paths, list(mloss),num_channels=opt.num_channels)
                 if callbacks.stop_training:
                     return
             # end batch ------------------------------------------------------------------------------------------------
@@ -513,6 +520,9 @@ def train(hyp, opt, device, callbacks):
 def parse_opt(known=False):
     """Parses command-line arguments for YOLOv5 training, validation, and testing."""
     parser = argparse.ArgumentParser()
+    # Added
+    parser.add_argument("--num_channels", type=int, default=3 )
+    # Added
     parser.add_argument("--weights", type=str, default=ROOT / "yolov5s.pt", help="initial weights path")
     parser.add_argument("--cfg", type=str, default="", help="model.yaml path")
     parser.add_argument("--data", type=str, default=ROOT / "data/coco128.yaml", help="dataset.yaml path")
@@ -527,9 +537,7 @@ def parse_opt(known=False):
     parser.add_argument("--noautoanchor", action="store_true", help="disable AutoAnchor")
     parser.add_argument("--noplots", action="store_true", help="save no plot files")
     parser.add_argument("--evolve", type=int, nargs="?", const=300, help="evolve hyperparameters for x generations")
-    parser.add_argument(
-        "--evolve_population", type=str, default=ROOT / "data/hyps", help="location for loading population"
-    )
+    parser.add_argument("--evolve_population", type=str, default=ROOT / "data/hyps", help="location for loading population")
     parser.add_argument("--resume_evolve", type=str, default=None, help="resume evolve from last generation")
     parser.add_argument("--bucket", type=str, default="", help="gsutil bucket")
     parser.add_argument("--cache", type=str, nargs="?", const="ram", help="image --cache ram/disk")
@@ -594,6 +602,7 @@ def main(opt, callbacks=Callbacks()):
             str(opt.weights),
             str(opt.project),
         )  # checks
+        # data/doclaynet_c6.yaml opt.data
         assert len(opt.cfg) or len(opt.weights), "either --cfg or --weights must be specified"
         if opt.evolve:
             if opt.project == str(ROOT / "runs/train"):  # if default project name, rename to runs/evolve
@@ -619,7 +628,8 @@ def main(opt, callbacks=Callbacks()):
         )
 
     # Train
-    if not opt.evolve:
+    if not opt.evolve: #HERE
+        print(opt.hyp,'opt.hyp')
         train(opt.hyp, opt, device, callbacks)
 
     # Evolve hyperparameters (optional)

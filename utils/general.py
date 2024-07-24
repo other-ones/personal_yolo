@@ -499,6 +499,7 @@ def check_file(file, suffix=""):
         files = []
         for d in "data", "models", "utils":  # search directories
             files.extend(glob.glob(str(ROOT / d / "**" / file), recursive=True))  # find file
+        
         assert len(files), f"File not found: {file}"  # assert file was found
         assert len(files) == 1, f"Multiple files match '{file}', specify exact path: {files}"  # assert unique
         return files[0]  # return file
@@ -527,6 +528,7 @@ def check_dataset(data, autodownload=True):
     # Read yaml (optional)
     if isinstance(data, (str, Path)):
         data = yaml_load(data)  # dictionary
+        print(data,'loaded yaml')
 
     # Checks
     for k in "train", "val", "names":
@@ -539,16 +541,22 @@ def check_dataset(data, autodownload=True):
     # Resolve paths
     path = Path(extract_dir or data.get("path") or "")  # optional 'path' default to '.'
     if not path.is_absolute():
+        print(path,'before')
         path = (ROOT / path).resolve()
+        
         data["path"] = path  # download scripts
     for k in "train", "val", "test":
         if data.get(k):  # prepend path
             if isinstance(data[k], str):
+                print((path / data[k]),'before')
                 x = (path / data[k]).resolve()
+                print(x,'before')
                 if not x.exists() and data[k].startswith("../"):
                     x = (path / data[k][3:]).resolve()
                 data[k] = str(x)
             else:
+                print((path / data[k][0]),'before')
+                print((path / data[k][0]).resolve(),'after')
                 data[k] = [str((path / x).resolve()) for x in data[k]]
 
     # Parse yaml
